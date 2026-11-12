@@ -96,7 +96,7 @@ export default function Timer() {
   // Full Screen Focus Mode & Real-time Live Activity Modal State
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [showLiveActivityModal, setShowLiveActivityModal] = useState(false);
-  const [liveTab, setLiveTab] = useState<'global' | 'groups'>('global');
+  const [liveTab, setLiveTab] = useState<string>('global');
   
   // Real-time Leaderboard & Groups Data
   const [rawUsersList, setRawUsersList] = useState<any[]>([]);
@@ -108,6 +108,7 @@ export default function Timer() {
   const [selectedScholar, setSelectedScholar] = useState<any | null>(null);
   const [scholarMonthSessions, setScholarMonthSessions] = useState<any[]>([]);
   const [isLoadingScholarData, setIsLoadingScholarData] = useState(false);
+  const [selectedCalendarDay, setSelectedCalendarDay] = useState<number | null>(null);
 
   const [subjects, setSubjects] = useState<string[]>(['General']);
   const [subject, setSubject] = useState('General');
@@ -541,7 +542,15 @@ export default function Timer() {
 
   const toggleTimer = () => {
     initOrResumeAudio();
-    if (isClosing) return;
+    if (isClosing) {
+      if (closeIntervalRef.current) {
+        clearInterval(closeIntervalRef.current);
+        closeIntervalRef.current = null;
+      }
+      setIsClosing(false);
+      setIsActive(true);
+      return;
+    }
     if (!isActive) {
       sessionSubjectRef.current = subject;
     }
@@ -550,6 +559,7 @@ export default function Timer() {
 
   const handleStop = () => {
     initOrResumeAudio();
+
     if (isClosing) {
       if (closeIntervalRef.current) {
         clearInterval(closeIntervalRef.current);
@@ -568,21 +578,23 @@ export default function Timer() {
     if (isActive) {
       setIsActive(false);
       const elapsed = modes[mode] - timeLeft;
-      
-      if (elapsed < 60) {
+
+      if (elapsed <= 0) {
         setTimeLeft(modes[mode]);
       } else {
         setIsClosing(true);
-        setCloseCountdown(5);
+        setCloseCountdown(10);
 
         closeIntervalRef.current = setInterval(() => {
           setCloseCountdown((prev) => {
             if (prev <= 1) {
-              if (closeIntervalRef.current) clearInterval(closeIntervalRef.current);
-              closeIntervalRef.current = null;
+              if (closeIntervalRef.current) {
+                clearInterval(closeIntervalRef.current);
+                closeIntervalRef.current = null;
+              }
               setIsClosing(false);
-              
-              if (modeRef.current === 'pomodoro') {
+
+              if (modeRef.current === 'pomodoro' && elapsed > 0) {
                 saveSession(elapsed);
               }
               setTimeLeft(modes[modeRef.current]);
@@ -682,7 +694,7 @@ export default function Timer() {
 
   const progress = ((modes[mode] - timeLeft) / modes[mode]) * 100;
   const elapsedSeconds = modes[mode] - timeLeft;
-  const displayTotalSeconds = todayStudySeconds + (isActive && mode === 'pomodoro' ? elapsedSeconds : 0);
+  const displayTotalSeconds = todayStudySeconds + (mode === 'pomodoro' ? elapsedSeconds : 0);
 
   // Helper for rank badges
   const getRankBadge = (totalSecs: number) => {
@@ -837,6 +849,18 @@ export default function Timer() {
         <div className={`absolute inset-0 opacity-20 blur-[100px] transition-colors duration-1000 ${
           mode === 'pomodoro' ? 'bg-cyan-500' : mode === 'shortBreak' ? 'bg-emerald-500' : 'bg-blue-500'
         }`} />
+
+        {/* Live Leaderboard Button (Hidden on mobile, shown on sm+ screens) */}
+        <div className="hidden sm:block absolute top-4 left-4 z-20">
+          <button
+            onClick={() => setShowLiveActivityModal(true)}
+            className="px-3 py-1.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700/80 text-cyan-400 hover:text-cyan-300 font-semibold text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-md active:scale-95"
+            title="Live Leaderboard"
+          >
+            <Trophy className="w-3.5 h-3.5 text-amber-400" />
+            <span>Live Leaderboard</span>
+          </button>
+        </div>
 
         {/* Small Discreet Full Screen Button (Renders ONLY after timer is active) */}
         {isActive && (
@@ -1056,6 +1080,18 @@ export default function Timer() {
               <Settings className="w-5 h-5" />
             </button>
           </div>
+
+          {/* Mobile-only Live Leaderboard Icon Button below focus timer */}
+          <div className="mt-5 sm:hidden flex justify-center">
+            <button
+              onClick={() => setShowLiveActivityModal(true)}
+              className="px-4 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700/80 text-amber-400 font-semibold text-xs flex items-center gap-2 transition-all cursor-pointer shadow-md active:scale-95"
+              title="Live Leaderboard"
+            >
+              <Trophy className="w-4 h-4 text-amber-400" />
+              <span className="text-cyan-300">Live Leaderboard</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1161,23 +1197,12 @@ export default function Timer() {
               exit={{ opacity: 0, scale: 0.95 }}
               className="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 w-full max-w-lg shadow-2xl relative overflow-hidden flex flex-col max-h-[85vh]"
             >
-              {/* Modal Header */}
+              {/* Clean Header: Just "Live" and Close button */}
               <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-800">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-10 h-10 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
-                    <Trophy className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-white text-base flex items-center gap-2">
-                      <span>Real-time Live Activity</span>
-                      <span className="text-[9px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded-full flex items-center gap-1 font-mono">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                        LIVE
-                      </span>
-                    </h3>
-                    <p className="text-xs text-cyan-400 font-medium">Daily study time • Resets at 5:00 AM</p>
-                  </div>
-                </div>
+                <h3 className="font-bold text-white text-base tracking-wide flex items-center gap-2">
+                  <Trophy className="w-4 h-4 text-amber-400" />
+                  <span>Live</span>
+                </h3>
 
                 <button
                   onClick={() => setShowLiveActivityModal(false)}
@@ -1187,34 +1212,35 @@ export default function Timer() {
                 </button>
               </div>
 
-              {/* Tabs: Global Leaderboard / My Groups */}
-              <div className="flex bg-slate-800/80 p-1 rounded-xl border border-slate-700/60 mb-4 shrink-0">
+              {/* Clean Text Tabs: Global + Individual Group Buttons */}
+              <div className="flex items-center gap-4 border-b border-slate-800 pb-2.5 mb-4 overflow-x-auto text-sm shrink-0 no-scrollbar">
                 <button
                   onClick={() => setLiveTab('global')}
-                  className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                  className={`pb-1 font-medium transition-all cursor-pointer text-xs sm:text-sm whitespace-nowrap ${
                     liveTab === 'global'
-                      ? 'bg-cyan-500 text-slate-950 shadow-sm'
-                      : 'text-slate-400 hover:text-white'
+                      ? 'text-cyan-400 border-b-2 border-cyan-400 font-bold'
+                      : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
-                  <Trophy className="w-3.5 h-3.5" />
-                  <span>Global Scholars ({globalLeaderboard.length})</span>
+                  Global
                 </button>
 
-                <button
-                  onClick={() => setLiveTab('groups')}
-                  className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                    liveTab === 'groups'
-                      ? 'bg-cyan-500 text-slate-950 shadow-sm'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  <Users className="w-3.5 h-3.5" />
-                  <span>My Groups ({myGroupsData.length})</span>
-                </button>
+                {myGroupsData.map((grp) => (
+                  <button
+                    key={grp.id}
+                    onClick={() => setLiveTab(grp.id)}
+                    className={`pb-1 font-medium transition-all cursor-pointer text-xs sm:text-sm whitespace-nowrap ${
+                      liveTab === grp.id
+                        ? 'text-cyan-400 border-b-2 border-cyan-400 font-bold'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    {grp.name}
+                  </button>
+                ))}
               </div>
 
-              {/* Tab 1: Global Scholars Real-time Leaderboard */}
+              {/* Tab 1: Global Leaderboard */}
               {liveTab === 'global' && (
                 <div className="flex-1 overflow-y-auto space-y-2.5 pr-1">
                   {globalLeaderboard.map((usr, index) => {
@@ -1291,79 +1317,74 @@ export default function Timer() {
                 </div>
               )}
 
-              {/* Tab 2: My Groups Real-time Member Activity */}
-              {liveTab === 'groups' && (
-                <div className="flex-1 overflow-y-auto space-y-4 pr-1">
-                  {myGroupsData.map((grp) => {
-                    const elapsed = (isActive && mode === 'pomodoro') ? elapsedSeconds : 0;
-                    const membersList = (grp.members || []).map((mUid: string) => {
-                      const mProfile = groupUsersMap[mUid];
-                      const isMe = mUid === user?.uid;
-                      const mTime = (dailyStudyMap[mUid] || 0) + (isMe ? elapsed : 0);
-                      return { mUid, mProfile, isMe, mTime };
-                    });
-
-                    // Sort members by today's study time descending
-                    membersList.sort((a: any, b: any) => b.mTime - a.mTime);
-
-                    return (
-                      <div key={grp.id} className="bg-slate-800/40 border border-slate-800 rounded-2xl p-3.5">
-                        <div className="flex items-center justify-between mb-2.5 pb-2 border-b border-slate-700/50">
-                          <h4 className="font-bold text-slate-200 text-xs sm:text-sm flex items-center gap-1.5">
-                            <span>#{grp.name}</span>
-                            <span className="text-[10px] text-cyan-400 bg-cyan-500/10 px-1.5 py-0.2 rounded font-mono">
-                              {grp.members?.length || 1} members
-                            </span>
-                          </h4>
-                          <span className="text-[9px] text-slate-400 font-mono">Resets at 5:00 AM</span>
-                        </div>
-
-                        {/* Group members list with live study time */}
-                        <div className="space-y-2">
-                          {membersList.map(({ mUid, mProfile, isMe, mTime }: any) => {
-                            const scholarObj = mProfile ? { id: mUid, ...mProfile } : { id: mUid, name: `Scholar ${mUid.slice(0, 4)}` };
-                            return (
-                              <div 
-                                key={mUid} 
-                                onClick={() => setSelectedScholar(scholarObj)}
-                                className="flex items-center justify-between p-3 rounded-2xl bg-slate-800/60 border border-slate-700/70 hover:border-cyan-500/40 hover:bg-slate-800 transition-all cursor-pointer group shadow-sm hover:scale-[1.01] active:scale-[0.99]"
-                                title="Click to view monthly study insights"
-                              >
-                                <div className="flex items-center gap-2.5 min-w-0">
-                                  <div className="w-7 h-7 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-cyan-400 text-xs font-bold shrink-0">
-                                    {(scholarObj.name || 'S').slice(0, 1).toUpperCase()}
-                                  </div>
-                                  <span className={`truncate text-xs font-semibold group-hover:text-cyan-300 transition-colors ${isMe ? 'text-cyan-300' : 'text-slate-200'}`}>
-                                    {scholarObj.name} {isMe && '(You)'}
-                                  </span>
-                                </div>
-                                <div className="text-right shrink-0 flex items-center gap-2">
-                                  <div>
-                                    <span className="font-mono text-cyan-400 font-semibold text-[11px] block">
-                                      {formatTotalTime(mTime)}
-                                    </span>
-                                    <span className="text-[8px] text-slate-500 uppercase tracking-wider block font-sans">Today</span>
-                                  </div>
-                                  <div className="text-slate-500 group-hover:text-cyan-400 transition-colors">
-                                    <ChevronRight className="w-3.5 h-3.5" />
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })}
-
-                  {myGroupsData.length === 0 && (
+              {/* Group-specific Leaderboards */}
+              {liveTab !== 'global' && (() => {
+                const grp = myGroupsData.find(g => g.id === liveTab);
+                if (!grp) {
+                  return (
                     <div className="text-center py-10 text-slate-500">
-                      <Users className="w-10 h-10 mx-auto mb-2 opacity-30" />
-                      <p className="text-xs">You haven't joined any groups yet. Join a group to see live member activity!</p>
+                      <p className="text-xs">Group not found.</p>
                     </div>
-                  )}
-                </div>
-              )}
+                  );
+                }
+
+                const elapsed = (isActive && mode === 'pomodoro') ? elapsedSeconds : 0;
+                const membersList = (grp.members || []).map((mUid: string) => {
+                  const mProfile = groupUsersMap[mUid];
+                  const isMe = mUid === user?.uid;
+                  const mTime = (dailyStudyMap[mUid] || 0) + (isMe ? elapsed : 0);
+                  return { mUid, mProfile, isMe, mTime };
+                });
+
+                membersList.sort((a: any, b: any) => b.mTime - a.mTime);
+
+                return (
+                  <div className="flex-1 overflow-y-auto space-y-2.5 pr-1">
+                    {membersList.map(({ mUid, mProfile, isMe, mTime }: any) => {
+                      const scholarObj = mProfile ? { id: mUid, ...mProfile } : { id: mUid, name: `Scholar ${mUid.slice(0, 4)}` };
+                      return (
+                        <div 
+                          key={mUid} 
+                          onClick={() => setSelectedScholar(scholarObj)}
+                          className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-800/60 border border-slate-700/70 hover:border-cyan-500/40 hover:bg-slate-800 transition-all cursor-pointer group shadow-sm hover:scale-[1.01] active:scale-[0.99]"
+                          title="Click to view monthly study insights"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-8 h-8 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-cyan-400 text-xs font-bold shrink-0">
+                              {(scholarObj.name || 'S').slice(0, 1).toUpperCase()}
+                            </div>
+                            <div className="min-w-0">
+                              <p className={`truncate text-xs sm:text-sm font-semibold group-hover:text-cyan-300 transition-colors ${isMe ? 'text-cyan-300' : 'text-slate-200'}`}>
+                                {scholarObj.name} {isMe && '(You)'}
+                              </p>
+                              <p className="text-[10px] text-slate-400">{scholarObj.classLevel || 'Scholar'}</p>
+                            </div>
+                          </div>
+
+                          <div className="text-right shrink-0 flex items-center gap-2">
+                            <div>
+                              <span className="font-mono text-cyan-400 font-bold text-xs sm:text-sm block">
+                                {formatTotalTime(mTime)}
+                              </span>
+                              <span className="text-[8px] text-slate-500 uppercase tracking-wider block font-sans">Today Time</span>
+                            </div>
+                            <div className="text-slate-500 group-hover:text-cyan-400 transition-colors">
+                              <ChevronRight className="w-4 h-4" />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {membersList.length === 0 && (
+                      <div className="text-center py-10 text-slate-500">
+                        <Users className="w-10 h-10 mx-auto mb-2 opacity-30" />
+                        <p className="text-xs">No members in this group yet.</p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </motion.div>
           </div>
         )}
@@ -1378,6 +1399,19 @@ export default function Timer() {
     const badge = getRankBadge(selectedScholar.todayStudyTime || selectedScholar.totalStudyTime || 0);
     const BadgeIcon = badge.icon;
 
+    // Selected calendar day calculation
+    const activeDay = selectedCalendarDay !== null ? selectedCalendarDay : new Date().getDate();
+    const activeDaySecs = currentMonthCalendar.dailyStudySeconds[activeDay] || 0;
+    const activeDayMins = Math.floor(activeDaySecs / 60);
+    const activeDayHours = Math.floor(activeDayMins / 60);
+    const activeDayRemMins = activeDayMins % 60;
+    let activeDayFormatted = '0m';
+    if (activeDayHours > 0) {
+      activeDayFormatted = `${activeDayHours}h ${activeDayRemMins}m`;
+    } else if (activeDayMins > 0) {
+      activeDayFormatted = `${activeDayMins}m`;
+    }
+
     return (
       <AnimatePresence>
         <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
@@ -1390,7 +1424,7 @@ export default function Timer() {
             {/* Modal Header */}
             <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-800 shrink-0">
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400 font-bold text-lg shadow-inner shrink-0">
+                <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400 font-bold text-base shadow-inner shrink-0">
                   {(selectedScholar.name || 'S').slice(0, 1).toUpperCase()}
                 </div>
                 <div className="min-w-0">
@@ -1415,24 +1449,27 @@ export default function Timer() {
               </div>
 
               <button
-                onClick={() => setSelectedScholar(null)}
+                onClick={() => {
+                  setSelectedScholar(null);
+                  setSelectedCalendarDay(null);
+                }}
                 className="p-1.5 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Monthly Title & Summary Badge */}
-            <div className="flex items-center justify-between bg-slate-800/60 p-3 rounded-2xl border border-slate-700/60 mb-4 shrink-0">
-              <div className="flex items-center gap-2 text-xs font-semibold text-cyan-300">
+            {/* Top Month Name & Clicked Day Study Time Bar */}
+            <div className="flex items-center justify-between bg-slate-800/60 px-3.5 py-2.5 rounded-2xl border border-slate-700/60 mb-4 shrink-0">
+              <div className="flex items-center gap-2 text-xs font-semibold text-slate-200">
                 <Calendar className="w-4 h-4 text-cyan-400 shrink-0" />
-                <span>Monthly Calendar ({currentMonthCalendar.monthName})</span>
+                <span>{currentMonthCalendar.monthName}</span>
               </div>
-              <div className="text-right shrink-0">
-                <span className="text-xs font-mono font-bold text-cyan-400 block">
-                  {formatTotalTime(scholarMonthStats.totalSecs)}
-                </span>
-                <span className="text-[9px] text-slate-400 uppercase tracking-wider block font-sans">Month Total</span>
+              <div className="text-right">
+                <div className="text-xs font-mono font-bold text-cyan-300 flex items-center gap-1.5 justify-end">
+                  <span className="text-[10px] text-slate-400 font-sans font-normal">Day {activeDay}:</span>
+                  <span className="text-cyan-400 font-extrabold">{activeDayFormatted}</span>
+                </div>
               </div>
             </div>
 
@@ -1455,74 +1492,71 @@ export default function Timer() {
                 </div>
 
                 {/* Monthly Calendar Grid */}
-                <div className="grid grid-cols-7 gap-1.5 mb-4">
+                <div className="grid grid-cols-7 gap-1.5 mb-2">
                   {/* Empty padding cells before first day of month */}
                   {Array.from({ length: currentMonthCalendar.firstDayIndex }).map((_, idx) => (
-                    <div key={`empty-${idx}`} className="h-14 sm:h-16 rounded-xl bg-slate-900/30 border border-transparent opacity-20" />
+                    <div key={`empty-${idx}`} className="h-11 sm:h-12 rounded-xl bg-slate-900/20 border border-transparent opacity-20" />
                   ))}
 
                   {/* Days of the Month */}
                   {Array.from({ length: currentMonthCalendar.daysInMonth }).map((_, idx) => {
                     const dayNum = idx + 1;
                     const secs = currentMonthCalendar.dailyStudySeconds[dayNum] || 0;
+                    const hours = secs / 3600;
                     const isToday = new Date().getDate() === dayNum;
-                    const hasStudied = secs > 0;
+                    const isSelected = activeDay === dayNum;
 
-                    const mins = Math.floor(secs / 60);
-                    const hours = Math.floor(mins / 60);
-                    const remMins = mins % 60;
-
-                    let timeDisplay = '';
-                    if (hours > 0) {
-                      timeDisplay = `${hours}h ${remMins}m`;
-                    } else if (mins > 0) {
-                      timeDisplay = `${mins}m`;
+                    // Lightness Heatmap Stages based on study hours:
+                    // 0 hrs: Neutral dark
+                    // >0 to 3 hrs: Stage 1 (dim cyan glow)
+                    // >3 to 5 hrs: Stage 2 (medium cyan highlight)
+                    // >5 to 7 hrs: Stage 3 (high lightness cyan highlight)
+                    // >7 hrs: Stage 4 (max lightness cyan-teal glow)
+                    let heatMapClass = 'bg-slate-800/40 border-slate-800/60 text-slate-400 hover:bg-slate-800/70';
+                    if (hours > 7) {
+                      heatMapClass = 'bg-gradient-to-br from-cyan-300 via-teal-300 to-emerald-300 border-white text-slate-950 font-extrabold shadow-[0_0_14px_rgba(34,211,238,0.7)]';
+                    } else if (hours > 5) {
+                      heatMapClass = 'bg-cyan-400 border-cyan-300 text-slate-950 font-bold shadow-[0_0_12px_rgba(6,182,212,0.5)]';
+                    } else if (hours > 3) {
+                      heatMapClass = 'bg-cyan-700/90 border-cyan-400/70 text-cyan-50 font-semibold shadow-[0_0_8px_rgba(6,182,212,0.3)]';
+                    } else if (hours > 0) {
+                      heatMapClass = 'bg-cyan-950/70 border-cyan-800/70 text-cyan-200 shadow-[inset_0_0_6px_rgba(6,182,212,0.15)]';
                     }
 
                     return (
-                      <div
+                      <button
                         key={`day-${dayNum}`}
-                        className={`h-14 sm:h-16 p-1.5 rounded-xl border flex flex-col justify-between transition-all relative ${
-                          hasStudied
-                            ? 'bg-cyan-500/15 border-cyan-500/50 shadow-sm shadow-cyan-500/10'
-                            : isToday
-                              ? 'bg-slate-800/90 border-cyan-400/40 shadow-inner'
-                              : 'bg-slate-800/30 border-slate-800/70'
+                        type="button"
+                        onClick={() => setSelectedCalendarDay(dayNum)}
+                        className={`h-11 sm:h-12 rounded-xl border flex items-center justify-center transition-all cursor-pointer relative group ${heatMapClass} ${
+                          isSelected
+                            ? 'ring-2 ring-cyan-400 ring-offset-2 ring-offset-slate-900 scale-[1.06] z-10'
+                            : 'hover:scale-[1.03]'
                         }`}
                       >
-                        <div className="flex items-center justify-between text-[10px]">
-                          <span className={`font-semibold ${isToday ? 'text-cyan-400 font-bold' : 'text-slate-400'}`}>
-                            {dayNum}
-                          </span>
-                          {hasStudied && (
-                            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
-                          )}
-                        </div>
+                        <span className={`text-xs font-semibold ${
+                          hours > 5 ? 'text-slate-950 font-extrabold' : isSelected ? 'text-cyan-300 font-bold' : isToday ? 'text-cyan-400 font-bold' : ''
+                        }`}>
+                          {dayNum}
+                        </span>
 
-                        {hasStudied ? (
-                          <span className="text-[10px] font-mono font-bold text-cyan-300 leading-tight truncate">
-                            {timeDisplay}
-                          </span>
-                        ) : (
-                          <span className="text-[9px] text-slate-600 font-mono">-</span>
+                        {isToday && hours <= 5 && (
+                          <span className="absolute bottom-1 w-1 h-1 rounded-full bg-cyan-400 animate-ping" />
                         )}
-                      </div>
+                      </button>
                     );
                   })}
                 </div>
 
-                {/* Quick Summary Bar */}
-                <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-800/40 border border-slate-800 text-xs text-slate-300">
-                  <div className="flex items-center gap-2">
-                    <Clock className="w-4 h-4 text-cyan-400 shrink-0" />
-                    <span>Completed Sessions: <strong className="text-white">{scholarMonthStats.sessionCount}</strong></span>
+                {/* Legend indicator explaining the lightness stages */}
+                <div className="flex items-center justify-between px-2.5 py-2 mt-3 bg-slate-900/60 rounded-xl border border-slate-800/80 text-[10px] text-slate-400">
+                  <span className="text-slate-500 font-medium">Study Intensity:</span>
+                  <div className="flex items-center gap-1.5 font-mono">
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-cyan-950 border border-cyan-800" /> &lt;3h</span>
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-cyan-700" /> &gt;3h</span>
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-cyan-400" /> &gt;5h</span>
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-gradient-to-r from-cyan-300 to-emerald-300" /> &gt;7h</span>
                   </div>
-                  {scholarMonthStats.topSub !== 'None' && (
-                    <div className="text-right truncate max-w-[180px]">
-                      <span className="text-slate-400 text-[10px] block">Top Subject</span>
-                      <strong className="text-amber-300 text-xs truncate block">{scholarMonthStats.topSub}</strong>
-                    </div>
-                  )}
                 </div>
               </div>
             )}
